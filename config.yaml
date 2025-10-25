@@ -1,0 +1,25 @@
+PATHS:
+  DATASET_DIR: dataset
+  EMBEDDINGS_DIR: embeddings
+  FAISS_INDEX_FILE: faiss_index.bin
+  LABELS_FILE: labels.pkl
+  SCRFD_MODEL: models/scrfd_500m.onnx
+RECOGNITION:
+  EMBEDDING_MODEL: VGG-Face
+  DISTANCE_METRIC: cosine
+  VERIFICATION_THRESHOLD: 0.68
+DEVICE: cuda
+CAMERA_SOURCES:
+- name: Webcam
+  source: 0
+- name: '1'
+  source: go[
+- name: '2'
+  source: https://192.168.137.53:4343/video
+DEDUPLICATION:
+  SAME_CAMERA_COOLDOWN_SECONDS: 15
+  CROSS_CAMERA_COOLDOWN_SECONDS: 30
+  MAX_ACCEPTED_DISTANCE: null
+ATTENDANCE:
+  COOLDOWN_HOURS: 0
+  LOG_FILE: attendance/attendance_log.csv

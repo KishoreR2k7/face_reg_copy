@@ -1,0 +1,44 @@
+# Core Deep Learning Libraries (GPU - CUDA 12.6)
+# Note: Install PyTorch with CUDA support for GPU acceleration
+# For CUDA 12.6 (as specified), use:
+# torch==2.6.0
+# torchvision==0.21.0
+# torchaudio==2.6.0
+# Or visit https://pytorch.org/get-started/locally/ to get the right version for your CUDA version
+torch
+torchvision
+torchaudio
+
+# SCRFD Face Detection
+insightface==0.7.3
+onnxruntime>=1.20.0
+
+# Face Recognition (DeepFace)
+deepface==0.0.93
+
+# Vector Database (FAISS)
+# Try faiss-gpu first, fallback to faiss-cpu if GPU not available
+# faiss-gpu  # Uncomment if you have CUDA-compatible GPU
+faiss-cpu>=1.9.0
+
+# Image & Video Processing
+opencv-python==4.10.0.84
+Pillow==10.4.0
+
+# Data Handling
+numpy==1.26.4
+pandas==2.2.3
+pickle-mixin==1.0.2
+
+
+tqdm==4.66.5
+matplotlib==3.9.2
+
+
+pyyaml==6.0.2
+
+# Backend / API server dependencies
+Flask==2.2.5
+flask-cors==3.0.10
+PyJWT==2.8.0
+python-dotenv==1.0.0

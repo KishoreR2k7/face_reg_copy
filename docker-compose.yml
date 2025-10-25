@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "5000:5000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - EMAIL1=${EMAIL1}
+      - PWD1=${PWD1}
+      - EMAIL2=${EMAIL2}
+      - PWD2=${PWD2}
+      - EMAIL3=${EMAIL3}
+      - PWD3=${PWD3}
+      - EMAIL4=${EMAIL4}
+      - PWD4=${PWD4}
+    volumes:
+      - ./attendance:/app/attendance
+      - ./attendance_system.db:/app/attendance_system.db
+    restart: unless-stopped
+    networks:
+      - face-recognition-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - face-recognition-net
+
+networks:
+  face-recognition-net:
+    driver: bridge
