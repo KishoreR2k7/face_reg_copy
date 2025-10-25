@@ -13,9 +13,11 @@ CAMERA_SOURCES:
 - name: Webcam
   source: 0
 - name: '1'
-  source: go[
+  source: '1'
 - name: '2'
   source: https://192.168.137.53:4343/video
+- name: cam 1
+  source: '0'
 DEDUPLICATION:
   SAME_CAMERA_COOLDOWN_SECONDS: 15
   CROSS_CAMERA_COOLDOWN_SECONDS: 30

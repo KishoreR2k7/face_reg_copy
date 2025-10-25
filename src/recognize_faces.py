@@ -48,10 +48,10 @@ class FaceRecognizer:
                 raise Exception("FAISS index not loaded. Run precompute_embeddings.py first.")
             print(f"FAISS index loaded with {len(self.labels)} persons: {self.labels}")
 
-            print("Step 4: Loading SCRFD Face Detector...")
-            # 2. Load SCRFD Face Detector (For bounding box on live/new images)
-            print(f"   Using SCRFD detector with device: {self.device}")
-            print(f"SCRFD Face Detector ready on {self.device}")
+            print("Step 4: Loading Face Detector...")
+            # 2. Load Face Detector (For bounding box on live/new images)
+            print(f"   Using face detector with device: {self.device}")
+            print(f"Face Detector ready on {self.device}")
             print("Step 5: Configuring DeepFace/Embedding model...")
 
             # 3. DeepFace Model Configuration (Used for generating the embedding)

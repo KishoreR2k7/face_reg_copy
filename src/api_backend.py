@@ -39,8 +39,15 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS cameras (
                     camera_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
-                    ip_address TEXT NOT NULL
+                    ip_address TEXT NOT NULL,
+                    is_active INTEGER NOT NULL DEFAULT 1
                 )''')
+
+    # Add is_active column to existing table if it doesn't exist (for migration)
+    try:
+        c.execute("ALTER TABLE cameras ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     # Attendance table
     c.execute('''CREATE TABLE IF NOT EXISTS attendance (
@@ -80,8 +87,9 @@ def init_db():
                     model_path TEXT
                 )''')
 
-    # Preload users from environment variables (placeholders for GitHub)
+    # Preload users from environment variables and a default admin
     users = [
+        ("admin", "admin"),  # Default admin user
         (os.getenv("EMAIL1", "EMAIL1_PLACEHOLDER"), os.getenv("PWD1", "PWD1_PLACEHOLDER")),
         (os.getenv("EMAIL2", "EMAIL2_PLACEHOLDER"), os.getenv("PWD2", "PWD2_PLACEHOLDER")),
         (os.getenv("EMAIL3", "EMAIL3_PLACEHOLDER"), os.getenv("PWD3", "PWD3_PLACEHOLDER")),
@@ -183,8 +191,8 @@ def add_student(current_user):
 def get_cameras(current_user):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT camera_id, ip_address, name FROM cameras")
-    cameras = [{'camera_id': row[0], 'ip_address': row[1], 'name': row[2] or f'Camera-{row[0]}'} for row in c.fetchall()]
+    c.execute("SELECT camera_id, ip_address, name, is_active FROM cameras")
+    cameras = [{'camera_id': row[0], 'ip_address': row[1], 'name': row[2] or f'Camera-{row[0]}', 'is_active': bool(row[3])} for row in c.fetchall()]
     conn.close()
     return jsonify(cameras)
 
@@ -380,6 +388,13 @@ def dataset_list(current_user):
     return jsonify(persons)
 
 
+import cv2
+import tempfile
+
+# ... (imports from the original file)
+
+# (The rest of the file remains the same until the dataset_upload function)
+
 @app.route('/dataset/upload', methods=['POST'])
 @token_required
 def dataset_upload(current_user):
@@ -387,7 +402,7 @@ def dataset_upload(current_user):
     files = request.files.getlist('images')
 
     if not label or not files:
-        return jsonify({'error': 'Label and image files are required'}), 400
+        return jsonify({'error': 'Label and image/video files are required'}), 400
 
     config = load_config()
     if not config:
@@ -405,33 +420,74 @@ def dataset_upload(current_user):
         filename = secure_filename(f.filename)
         if not filename:
             continue
-        dest_path = os.path.join(person_dir, filename)
-        # Avoid overwriting by appending counter if exists
-        base, ext = os.path.splitext(filename)
-        counter = 1
-        while os.path.exists(dest_path):
-            filename = f"{base}_{counter}{ext}"
+
+        # Check if it's a video file
+        if '.' in filename and filename.rsplit('.', 1)[1].lower() in ['mp4', 'mov', 'avi']:
+            # It's a video, process it
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{filename.rsplit(".", 1)[1]}') as temp_video:
+                    f.save(temp_video.name)
+                
+                # Extract frames
+                vidcap = cv2.VideoCapture(temp_video.name)
+                success, image = vidcap.read()
+                count = 0
+                frame_skip = 5 # Save one frame every 5 frames
+                saved_count = 0
+                
+                while success:
+                    if count % frame_skip == 0:
+                        frame_filename = f"{label}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S%f')}.jpg"
+                        dest_path = os.path.join(person_dir, frame_filename)
+                        cv2.imwrite(dest_path, image)
+                        saved_files.append(dest_path)
+                        saved_count += 1
+                        
+                        # Record in DB
+                        uploaded_at = datetime.datetime.utcnow().isoformat()
+                        c.execute("INSERT INTO dataset (student_roll_no, image_path, uploaded_at) VALUES (?, ?, ?)",
+                                  (label, dest_path, uploaded_at))
+                    
+                    success, image = vidcap.read()
+                    count += 1
+                
+                vidcap.release()
+                os.unlink(temp_video.name) # Clean up temp file
+                print(f"Extracted {saved_count} frames from video {filename}")
+
+            except Exception as e:
+                print(f"Error processing video {filename}: {e}")
+                # Optionally, you can return an error response here
+                continue # Skip to the next file
+        else:
+            # It's an image file
             dest_path = os.path.join(person_dir, filename)
-            counter += 1
+            # Avoid overwriting by appending counter if exists
+            base, ext = os.path.splitext(filename)
+            counter = 1
+            while os.path.exists(dest_path):
+                filename = f"{base}_{counter}{ext}"
+                dest_path = os.path.join(person_dir, filename)
+                counter += 1
 
-        f.save(dest_path)
-        saved_files.append(dest_path)
+            f.save(dest_path)
+            saved_files.append(dest_path)
 
-        # Record in DB
-        uploaded_at = datetime.datetime.utcnow().isoformat()
-        c.execute("INSERT INTO dataset (student_roll_no, image_path, uploaded_at) VALUES (?, ?, ?)",
-                  (label, dest_path, uploaded_at))
+            # Record in DB
+            uploaded_at = datetime.datetime.utcnow().isoformat()
+            c.execute("INSERT INTO dataset (student_roll_no, image_path, uploaded_at) VALUES (?, ?, ?)",
+                      (label, dest_path, uploaded_at))
 
     conn.commit()
     conn.close()
 
-    # Attempt to run training (precompute embeddings). Run synchronously and return success/failure.
+    # Attempt to run training (precompute embeddings).
     try:
         precompute_embeddings.precompute_embeddings()
-        return jsonify({'message': f'Uploaded {len(saved_files)} images for {label}', 'training_completed': True})
+        return jsonify({'message': f'Uploaded {len(saved_files)} files for {label} and retrained model.', 'training_completed': True})
     except Exception as e:
-        # If training fails, still return success for upload but indicate training error
-        return jsonify({'message': f'Uploaded {len(saved_files)} images for {label}', 'training_completed': False, 'training_error': str(e)}), 500
+        return jsonify({'message': f'Uploaded {len(saved_files)} files for {label}, but training failed.', 'training_completed': False, 'training_error': str(e)}), 500
+
 
 
 @app.route('/dataset/<string:person_name>', methods=['DELETE'])
@@ -488,6 +544,30 @@ def dataset_train(current_user):
         return jsonify({'message': 'Training completed', 'training_completed': True})
     except Exception as e:
         return jsonify({'message': 'Training failed', 'training_completed': False, 'training_error': str(e)}), 500
+
+
+@app.route('/cameras/<int:camera_id>/toggle', methods=['POST'])
+@token_required
+def toggle_camera_status(current_user, camera_id):
+    """Toggle the active status of a camera."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    # Get current status
+    c.execute("SELECT is_active FROM cameras WHERE camera_id=?", (camera_id,))
+    result = c.fetchone()
+    
+    if not result:
+        conn.close()
+        return jsonify({'error': 'Camera not found'}), 404
+        
+    # Toggle status
+    new_status = not bool(result[0])
+    c.execute("UPDATE cameras SET is_active=? WHERE camera_id=?", (int(new_status), camera_id))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'message': f'Camera {camera_id} status updated to {"active" if new_status else "inactive"}'})
 
 
 if __name__ == '__main__':
